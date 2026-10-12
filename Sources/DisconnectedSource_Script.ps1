@@ -22,7 +22,7 @@ $MultiValueDelimiter = ','                                        # Comma-separa
 $aggregateCSV        = $false                                     # Set to $true to trigger unoptimized aggregation after CSV generation
 
 $execLoc       = 'C:\Users\greg_\...'
-$OutputFile    = "$execLoc\SailPoint.csv"
+$OutputFile    = "$execLoc\Zajac.csv"
 
 $LogDir        = 'C:\Users\greg_\...\Logs'
 $SuccessLog    = "$LogDir\Zajac_AccountAggregation_Success.log"
