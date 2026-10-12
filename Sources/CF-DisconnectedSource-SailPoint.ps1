@@ -19,11 +19,11 @@ $DryRun              =  $true                                               # Se
 $aggregateCSV        =  $false                                              # Set to $true to trigger unoptimized aggregation after CSV generation (ignored if $DryRun =$true)[cite: 2]
 
 $execLoc            = 'C:\Users\greg_\...'                                  #[cite: 2]
-$OutputFile         = "$execLoc\Coupa.csv"                              #[cite: 2]
+$OutputFile         = "$execLoc\SailPoint.csv"                              #[cite: 2]
 
 $LogDir             = 'C:\Users\greg_\...\Logs'                             #[cite: 2]
-$SuccessLog         = "$LogDir\Coupa_AccountAggregation_Success.log"    #[cite: 2]
-$FailedLog          = "$LogDir\Coupa_AccountAggregation_Failure.log"    #[cite: 2]
+$SuccessLog         = "$LogDir\SailPoint_AccountAggregation_Success.log"    #[cite: 2]
+$FailedLog          = "$LogDir\SailPoint_AccountAggregation_Failure.log"    #[cite: 2]
 
 $Tenant             = 'cfi-sb'                                              #[cite: 2]
 $Domain             = 'identitynow'                                         #[cite: 2]
