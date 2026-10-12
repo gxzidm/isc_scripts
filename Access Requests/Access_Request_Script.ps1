@@ -91,7 +91,7 @@ Get-Content -Path $CsvPath |
 
     try {
         # Identity Search via /v2026/search
-        $idUrl = "https://$Tenant.api.identitynow-demo.com/v2026/search"
+        $idUrl = "https://$Tenant.api.$Domain.com/v2026/search"
         $body = @"
 {
   `"indices`": [
@@ -127,7 +127,7 @@ Get-Content -Path $CsvPath |
         # Write-Host "[INFO] Role ID: $targetRoleId" -ForegroundColor Green
 
         # Submit Access Request via /v2026/access-requests
-        $reqUrl = "https://$Tenant.api.identitynow-demo.com/v2026/access-requests"
+        $reqUrl = "https://$Tenant.api.$Domain.com/v2026/access-requests"
 $body = @"
 {
     `"requestedFor`": [
