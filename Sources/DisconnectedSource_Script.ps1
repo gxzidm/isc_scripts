@@ -18,7 +18,6 @@
 $TagValue            = 'ZAJAC'                                    # Tag value to search roles for
 $SourceName          = 'Zajac - Unconnected System'               # Target Flat File Source Name in ISC
 $IdentityIdAttribute = 'name'                                     # Attribute used for 'id' and 'name' (e.g., 'name', 'uid')
-$MultiValueDelimiter = ','                                        # Comma-separated entitlement output
 $aggregateCSV        = $false                                     # Set to $true to trigger unoptimized aggregation after CSV generation
 
 $execLoc       = 'C:\Users\greg_\...'
