@@ -53,7 +53,7 @@ try {
 
 # 3. OAUTH2 TOKEN ACQUISITION (/oauth/token)
 try {
-    $tokenUrl = "https://$Tenant.api.identitynow.com/oauth/token"
+    $tokenUrl = "https://$Tenant.api.$Domain.com/oauth/token"
     $body = @{
         grant_type    = 'client_credentials'
         client_id     = $ClientId
@@ -82,7 +82,7 @@ try {
     Write-Host "[+] Resolving Target Source ID for Source Name '$SourceName'..." -ForegroundColor Cyan
     
     $sourceFilter = "name eq `"$SourceName`""
-    $sourceUrl = "https://$Tenant.api.identitynow.com/v2026/sources?filters=" + [System.Web.HttpUtility]::UrlEncode($sourceFilter)
+    $sourceUrl = "https://$Tenant.api.$Domain.com/v2026/sources?filters=" + [System.Web.HttpUtility]::UrlEncode($sourceFilter)
     $sources = Invoke-RestMethod -Uri $sourceUrl -Method Get -Headers $headers
 
     if ($null -eq $sources -or (@($sources)).Count -eq 0) {
@@ -95,7 +95,7 @@ try {
     # Step B: Fetch All Entitlements for Target Source (/v2026/entitlements)
     Write-Host "[+] Fetching entitlement definitions for Source [$targetSourceId]..." -ForegroundColor Cyan
     $entFilter = "source.id eq `"$targetSourceId`""
-    $entUrl = "https://$Tenant.api.identitynow.com/v2026/entitlements?filters=" + [System.Web.HttpUtility]::UrlEncode($entFilter) + "&limit=250"
+    $entUrl = "https://$Tenant.api.$Domain.com/v2026/entitlements?filters=" + [System.Web.HttpUtility]::UrlEncode($entFilter) + "&limit=250"
     $sourceEntitlements = Invoke-RestMethod -Uri $entUrl -Method Get -Headers $headers
 
     # Build Map: Entitlement ID -> Entitlement Value
@@ -119,7 +119,7 @@ try {
         indices = @("roles")
     } | ConvertTo-Json -Depth 5
 
-    $searchUrl = "https://$Tenant.api.identitynow.com/v2026/search"
+    $searchUrl = "https://$Tenant.api.$Domain.com/v2026/search"
     $searchHeaders = $headers.Clone()
     $searchHeaders['Content-Type'] = 'application/json'
 
@@ -139,7 +139,7 @@ try {
     foreach ($role in $roles) {
         [void]$taggedRoleIds.Add($role.id)
         
-        $roleUrl = "https://$Tenant.api.identitynow.com/v2026/roles/$($role.id)"
+        $roleUrl = "https://$Tenant.api.$Domain.com/v2026/roles/$($role.id)"
         $roleDetail = Invoke-RestMethod -Uri $roleUrl -Method Get -Headers $headers
         
         $roleEntSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
@@ -232,7 +232,7 @@ try {
     Write-Host "------------------------------------------------------------" -ForegroundColor Gray
     Write-Host "[+] Uploading CSV file and triggering account aggregation for source [$targetSourceId]..." -ForegroundColor Cyan
     
-    $uploadUrl = "https://$Tenant.api.identitynow.com/v2026/sources/$targetSourceId/load-accounts"
+    $uploadUrl = "https://$Tenant.api.$Domain.com/v2026/sources/$targetSourceId/load-accounts"
 
     $httpClient = [System.Net.Http.HttpClient]::new()
     $httpClient.DefaultRequestHeaders.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $accessToken)
