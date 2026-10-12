@@ -2,39 +2,37 @@
 .SYNOPSIS
     SailPoint ISC Flat File Disconnected Account CSV Generator & Automated Source Aggregation Engine
 .DESCRIPTION
-    1. Authenticates to SailPoint ISC via OAuth2 Client Credentials grant (/oauth/token).
-    2. Resolves target Source ID by name via GET /v2026/sources.
-    3. Fetches all Entitlements owned by the target Source via GET /v2026/entitlements to build an authoritative Entitlement Lookup Map.
-    4. Searches for Roles carrying the target Tag Value via POST /v2026/search.
-    5. Cross-references Role entitlement assignments against the Source Entitlement Lookup Map to map Role IDs to Entitlement Values.
-    6. Resolves identities holding those tagged roles via POST /v2026/search.
-    7. Inspects $identity.access for assigned tagged roles, derives the target source entitlements from memory, and exports the CSV.
-    8. Uploads the generated CSV payload via POST /v2026/sources/{id}/load-accounts if configured.
+    1. Authenticates to SailPoint ISC via OAuth2 Client Credentials grant (/oauth/token)[cite: 2].
+    2. Resolves target Source ID by name via GET /v2026/sources[cite: 2].
+    3. Fetches all Entitlements owned by the target Source via GET /v2026/entitlements to build an authoritative Entitlement Lookup Map[cite: 2].
+    4. Resolves Roles containing target source entitlements using direct Entitlement ID matching in Search, with an automated fallback to /v2026/roles and Access Profile inspection[cite: 2].
+    5. Resolves identities holding those roles via POST /v2026/search using @access(id:"ROLE_ID")[cite: 2].
+    6. Inspects $identity.access for assigned roles, derives target source entitlements, and exports a clean CSV payload[cite: 2].     7. Evaluates$DryRun: If $true, execution halts after CSV generation; if$false (and $aggregateCSV =$true), uploads payload via POST /v2026/sources/{id}/load-accounts[cite: 2].
 #>
 
 # ==============================================================================
 # CONFIGURATION PARAMETERS (HARDCODED)
 # ==============================================================================
-$TagValue            = 'COUPA'                                        # Tag value to search roles for
-$SourceName          = 'Coupa'                                        # Target Flat File Source Name in ISC
-$IdentityIdAttribute = 'name'                                         # Attribute used for 'id' and 'name' (e.g., 'name', 'uid')
-$aggregateCSV        = $true                                          # Set to $true to trigger unoptimized aggregation after CSV generation
+$SourceName          = 'Coupa'                                              # Target Flat File Source Name in ISC[cite: 2]
+$IdentityIdAttribute = 'name'                                               # Attribute used for 'id' and 'name' (e.g., 'name', 'uid')[cite: 2]
+$DryRun              =  $true                                               # Set to $true to generate CSV only (stops actual API aggregation)
+$aggregateCSV        =  $false                                              # Set to $true to trigger unoptimized aggregation after CSV generation (ignored if $DryRun =$true)[cite: 2]
 
-$execLoc            = 'C:\Users\greg_\...'
-$OutputFile         = "$execLoc\Coupa.csv"
+$execLoc            = 'C:\Users\greg_\...'                                  #[cite: 2]
+$OutputFile         = "$execLoc\Coupa.csv"                                  #[cite: 2]
 
-$LogDir             = 'C:\Users\greg_\...\Logs'
-$SuccessLog         = "$LogDir\Coupa_AccountAggregation_Success.log"
-$FailedLog          = "$LogDir\Coupa_AccountAggregation_Failure.log"
+$LogDir             = 'C:\Users\greg_\...\Logs'                             #[cite: 2]
+$SuccessLog         = "$LogDir\Coupa_AccountAggregation_Success.log"        #[cite: 2]
+$FailedLog          = "$LogDir\Coupa_AccountAggregation_Failure.log"        #[cite: 2]
 
-$Tenant             = 'cfi-sb'
-$Domain             = 'identitynow'
-$ClientId           = 'CFI SBX CLIENT ID'
-$ClientSecret       = 'CFI SBX CLIENT SECRET'
+$Tenant             = 'cfi-sb'                                              #[cite: 2]
+$Domain             = 'identitynow'                                         #[cite: 2]
+$ClientId           = 'CFI SBX CLIENT ID'                                   #[cite: 2]
+$ClientSecret       = 'CFI SBX CLIENT SECRET'                               #[cite: 2]
 # ==============================================================================
 
-$ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Web
+$ErrorActionPreference = 'Stop'                                   #[cite: 2]
+Add-Type -AssemblyName System.Web                                 #[cite: 2]
 
 # 1. PRE-FLIGHT LOGGING INITIALIZATION
 try {
@@ -50,7 +48,7 @@ try {
     exit 1
 }
 
-# 3. OAUTH2 TOKEN ACQUISITION (/oauth/token)
+# 2. OAUTH2 TOKEN ACQUISITION (/oauth/token)
 try {
     $tokenUrl = "https://$Tenant.api.$Domain.com/oauth/token"
     $body = @{
@@ -88,7 +86,7 @@ try {
         throw "Target Source named `"$SourceName`" could not be resolved."
     }
 
-    $targetSourceId = $sources[0].id
+    $targetSourceId =$sources[0].id
     Write-Host "[SUCCESS] Target Source ID resolved: [$targetSourceId]" -ForegroundColor Green
 
     # Step B: Fetch All Entitlements for Target Source (/v2026/entitlements)
@@ -100,78 +98,114 @@ try {
     # Build Map: Entitlement ID -> Entitlement Value
     $sourceEntitlementMap = @{}
     if ($sourceEntitlements) {
-        foreach ($se in $sourceEntitlements) {
-            $val = if ($se.value) { $se.value } elseif ($se.name) { $se.name } else { $se.id }
-            $sourceEntitlementMap[$se.id] = $val
+        foreach ($se in $sourceEntitlements) {$val = if ($se.value) {$se.value } elseif ($se.name) {$se.name } else { $se.id }$sourceEntitlementMap[$se.id] =$val
         }
     }
     Write-Host "[SUCCESS] Cached $($sourceEntitlementMap.Count) entitlement definition(s) for source '$SourceName'." -ForegroundColor Green
 
-    # Step C: Search for Roles Tagged with $TagValue (/v2026/search)
-    Write-Host "------------------------------------------------------------" -ForegroundColor Gray
-    Write-Host "[+] Searching for Roles tagged with '$TagValue'..." -ForegroundColor Cyan
-    
-    $roleSearchBody = @{
-        query = @{
-            query = "tags:$TagValue"
-        }
-        indices = @("roles")
-    } | ConvertTo-Json -Depth 5
-
-    $searchUrl = "https://$Tenant.api.$Domain.com/v2026/search"
-    $searchHeaders = $headers.Clone()
-    $searchHeaders['Content-Type'] = 'application/json'
-
-    $roles = Invoke-RestMethod -Uri $searchUrl -Method Post -Headers $searchHeaders -Body $roleSearchBody
-
-    if ($null -eq $roles -or (@($roles)).Count -eq 0) {
-        $msg = "[WARNING] No roles found matching tag '$TagValue'."
+    if ($sourceEntitlementMap.Count -eq 0) {$msg = "[WARNING] No entitlements exist for source '$SourceName'. Proceeding with blank CSV output."
         Write-Host $msg -ForegroundColor Yellow
         $msg | Out-File -FilePath $FailedLog -Append -Encoding utf8
-        exit 0
+    }
+
+    # Step C: Search for Roles Referencing Source Entitlements (/v2026/search)
+    Write-Host "------------------------------------------------------------" -ForegroundColor Gray
+    Write-Host "[+] Resolving Roles referencing Source [$targetSourceId] entitlements..." -ForegroundColor Cyan
+
+    $roles = @()
+
+    if ($sourceEntitlementMap.Count -gt 0) {
+        # Construct search query matching cached entitlement IDs from target source
+        $entIdList   =$sourceEntitlementMap.Keys | ForEach-Object { "`"$_`"" }
+        $entIdJoined = $entIdList -join ' OR '
+        $roleSearchQuery = "(entitlements.id:($entIdJoined)) OR (accessProfiles.entitlements.id:($entIdJoined)) OR (entitlements.source.id:`"$targetSourceId`")"
+
+        $roleSearchBody = @{
+            query = @{
+                query = $roleSearchQuery
+            }
+            indices = @("roles")
+        } | ConvertTo-Json -Depth 5
+
+        $searchUrl = "https://$Tenant.api.$Domain.com/v2026/search"
+        $searchHeaders = $headers.Clone()
+        $searchHeaders['Content-Type'] = 'application/json'
+
+        $roles = Invoke-RestMethod -Uri $searchUrl -Method Post -Headers $searchHeaders -Body $roleSearchBody
+    }
+
+    # FAIL-SAFE FALLBACK: If Search API returns 0 results, scan roles endpoint directly (/v2026/roles)
+    if ($null -eq $roles -or (@($roles)).Count -eq 0) {
+        Write-Host "[!] Search API returned 0 roles. Initiating fail-safe scan via GET /v2026/roles..." -ForegroundColor Yellow
+        $allRolesUrl = "https://$Tenant.api.$Domain.com/v2026/roles?limit=250"
+        $roles = Invoke-RestMethod -Uri $allRolesUrl -Method Get -Headers $headers
     }
 
     # Map Role ID -> HashSet of Target Source Entitlement Values
-    $taggedRoleIds     = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $targetRoleIds     = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $roleToEntValueMap = @{}
 
-    foreach ($role in $roles) {
-        [void]$taggedRoleIds.Add($role.id)
-        
-        $roleUrl = "https://$Tenant.api.$Domain.com/v2026/roles/$($role.id)"
-        $roleDetail = Invoke-RestMethod -Uri $roleUrl -Method Get -Headers $headers
-        
-        $roleEntSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    if ($roles) {
+        foreach ($role in $roles) {$roleUrl = "https://$Tenant.api.$Domain.com/v2026/roles/$($role.id)"
+            $roleDetail = Invoke-RestMethod -Uri $roleUrl -Method Get -Headers $headers
+            $roleEntSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 
-        if ($roleDetail.entitlements) {
-            foreach ($ent in $roleDetail.entitlements) {
-                # Check if this role entitlement exists in our cached Source Entitlement Map
-                if ($sourceEntitlementMap.ContainsKey($ent.id)) {
-                    [void]$roleEntSet.Add($sourceEntitlementMap[$ent.id])
+            # 1. Check direct role entitlements
+            if ($roleDetail.entitlements) {
+                foreach ($ent in $roleDetail.entitlements) {
+                    if ($sourceEntitlementMap.ContainsKey($ent.id)) {
+                        [void]$roleEntSet.Add($sourceEntitlementMap[$ent.id])
+                    }
                 }
             }
+
+            # 2. Check entitlements within attached Access Profiles
+            if ($roleDetail.accessProfiles) {
+                foreach ($ap in $roleDetail.accessProfiles) {$apUrl = "https://$Tenant.api.$Domain.com/v2026/access-profiles/$($ap.id)"
+                    $apDetail = Invoke-RestMethod -Uri $apUrl -Method Get -Headers $headers
+                    if ($apDetail.entitlements) {
+                        foreach ($ent in $apDetail.entitlements) {
+                            if ($sourceEntitlementMap.ContainsKey($ent.id)) {
+                                [void]$roleEntSet.Add($sourceEntitlementMap[$ent.id])
+                            }
+                        }
+                    }
+                }
+            }
+
+            # Only retain role if it contains entitlements tied to the target source
+            if ($roleEntSet.Count -gt 0) {                 [void]$targetRoleIds.Add($role.id)
+                $roleToEntValueMap[$role.id] =$roleEntSet
+            }
         }
-        $roleToEntValueMap[$role.id] = $roleEntSet
     }
 
-    Write-Host "[SUCCESS] Processed $(@($roles).Count) role(s) carrying tag '$TagValue'." -ForegroundColor Green
+    if ($targetRoleIds.Count -eq 0) {$msg = "[WARNING] Verified 0 roles containing entitlements for Source [$targetSourceId]."
+        Write-Host $msg -ForegroundColor Yellow
+        $msg | Out-File -FilePath $FailedLog -Append -Encoding utf8
+    } else {
+        Write-Host "[SUCCESS] Successfully matched $($targetRoleIds.Count) role(s) containing entitlements for source '$SourceName'." -ForegroundColor Green
+    }
 
-    # Step D: Search Identities holding the Tagged Roles (/v2026/search)
-    $roleQueryParts  = $taggedRoleIds | ForEach-Object { "@access(id:`"$_`")" }
-    $roleQueryString = "(" + ($roleQueryParts -join " OR ") + ")"
+    # Step D: Search Identities holding the Target Roles (/v2026/search)
+    $identities = @()
+    if ($targetRoleIds.Count -gt 0) {
+        $roleQueryParts  =$targetRoleIds | ForEach-Object { "@access(id:`"$_`")" }
+        $roleQueryString = "(" + ($roleQueryParts -join " OR ") + ")"
 
-    $identitySearchBody = @{
-        query = @{
-            query = $roleQueryString
-        }
-        indices = @("identities")
-    } | ConvertTo-Json -Depth 5
+        $identitySearchBody = @{
+            query = @{
+                query = $roleQueryString
+            }
+            indices = @("identities")
+        } | ConvertTo-Json -Depth 5
 
-    Write-Host "[+] Searching for Identities holding tagged roles..." -ForegroundColor Cyan
-    $identities = Invoke-RestMethod -Uri $searchUrl -Method Post -Headers $searchHeaders -Body $identitySearchBody
+        Write-Host "[+] Searching for Identities holding target roles..." -ForegroundColor Cyan
+        $identities = Invoke-RestMethod -Uri $searchUrl -Method Post -Headers $searchHeaders -Body $identitySearchBody
+    }
 
     if ($null -eq $identities -or (@($identities)).Count -eq 0) {
-        $msg = "[WARNING] No identities found holding the tagged roles."
+        $msg = "[WARNING] No identities found holding the target roles."
         Write-Host $msg -ForegroundColor Yellow
     } else {
         Write-Host "[SUCCESS] Found $(@($identities).Count) target identity/identities." -ForegroundColor Green
@@ -181,23 +215,19 @@ try {
     $csvRecords = [System.Collections.Generic.List[PSCustomObject]]::new()
 
     if ($identities) {
-        foreach ($identity in $identities) {
-            # Extract identity account identifier
-            $idVal = $identity.$IdentityIdAttribute
+        foreach ($identity in $identities) {$idVal = $identity.$IdentityIdAttribute
             if (-not $idVal) {
-                $idVal = $identity.name
+                $idVal =$identity.name
             }
 
             if ($identity.access) {
                 foreach ($accessItem in $identity.access) {
-                    if ($accessItem.type -eq 'ROLE' -and $taggedRoleIds.Contains($accessItem.id)) {
+                    if ($accessItem.type -eq 'ROLE' -and $targetRoleIds.Contains($accessItem.id)) {
                         if ($roleToEntValueMap.ContainsKey($accessItem.id)) {
-                            foreach ($val in $roleToEntValueMap[$accessItem.id]) {
-                                # Build account row
-                                    $csvRecords.Add([PSCustomObject]@{
-                                        id                = $idVal
-                                        name              = $idVal
-                                        groups            = $val
+                            foreach ($val in $roleToEntValueMap[$accessItem.id]) {$csvRecords.Add([PSCustomObject]@{
+                                    id     = $idVal
+                                    name   = $idVal
+                                    groups = $val
                                 })
                             }
                         }
@@ -207,9 +237,15 @@ try {
         }
     }
 
-    # Step F: Export Data to CSV Payload
+# Step F: Export Data to CSV Payload
     if ($csvRecords.Count -gt 0) {
-        $csvRecords | Export-Csv -Path $OutputFile -NoTypeInformation -Encoding UTF8
+        # Write hardcoded header first
+        '"id","name","groups"' | Out-File -FilePath $OutputFile -Encoding ascii -Force
+        
+        # Convert objects to CSV strings in memory, skip header line, and append to file
+        ($csvRecords | ConvertTo-Csv -NoTypeInformation | Select-Object -Skip 1) | 
+            Out-File -FilePath $OutputFile -Append -Encoding ascii
+            
         Write-Host "[SUCCESS] Exported $($csvRecords.Count) record(s) to '$OutputFile'." -ForegroundColor Green
     } else {    
         '"id","name","groups"' | Out-File -FilePath $OutputFile -Encoding ascii -Force
@@ -221,9 +257,18 @@ try {
     Write-Host $successMsg -ForegroundColor Green
     $successMsg | Out-File -FilePath $SuccessLog -Append -Encoding utf8
 
+    # --------------------------------------------------------------------------
+    # DRY RUN / AGGREGATION GATEWAY
+    # --------------------------------------------------------------------------
+    if ($DryRun) {
+        Write-Host "------------------------------------------------------------" -ForegroundColor Gray
+        Write-Host "[DRY RUN] Execution halted as `$DryRun is set to `$true. File written to '$OutputFile' but aggregation API was not called." -ForegroundColor Yellow
+        exit 0
+    }
+
     if (-not $aggregateCSV) {
         Write-Host "------------------------------------------------------------" -ForegroundColor Gray
-        Write-Host "[INFO] CSV generation completed. Unoptimized aggregation skipped as per configuration." -ForegroundColor Cyan
+        Write-Host "[INFO] CSV generation completed. Unoptimized aggregation skipped as per `$aggregateCSV configuration." -ForegroundColor Cyan
         exit 0
     }
 
@@ -252,7 +297,7 @@ try {
     if ($uploadResponse.IsSuccessStatusCode) {
         $aggSuccessMsg = "[SUCCESS] Account aggregation triggered successfully for Source [$SourceName]. Task Payload:`n$responseBody"
         Write-Host $aggSuccessMsg -ForegroundColor Green
-        $aggSuccessMsg | Out-File -FilePath $SuccessLog -Append -Encoding utf8
+        $aggSuccessMsg | Out-File -FilePath$SuccessLog -Append -Encoding utf8
     } else {
         throw "Aggregation upload failed with HTTP status code $($uploadResponse.StatusCode):$responseBody"
     }
