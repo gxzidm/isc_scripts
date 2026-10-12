@@ -21,7 +21,6 @@ $IdentityIdAttribute = 'name'                                     # Attribute us
 $MultiValueDelimiter = ','                                        # Comma-separated entitlement output
 $aggregateCSV        = $false                                     # Set to $true to trigger unoptimized aggregation after CSV generation
 
-$execLoc       = 'C:\Users\greg_\...'
 $LogDir        = 'C:\Users\greg_\...\Logs'
 $SuccessLog    = "$LogDir\Zajac_AccountAggregation_Success.log"
 $FailedLog     = "$LogDir\Zajac_AccountAggregation_Failure.log"
